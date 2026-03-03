@@ -11,12 +11,14 @@ from data_handler_f import DataHandler
 
 
 class Focus:
-    def __init__(self):
+    def __init__(self, tsip_programs_path=None, time_spent_on_screen_path=None):
         self.seen_pids = set()
         self.active_titles = {}
+        
+        self.start_time = time.time()
 
 
-        self.whitelist = ["wallpaper32.exe", "python.exe"]
+        self.whitelist = ["wallpaper32.exe", "python.exe", "ondedrive.exe", "msedgewebview2.exe"]
         self.ignored_paths = [r"C:\windows",
                               r"\Program Files (x86)\Microsoft\EdgeWebVie",
                                self.get_program_files_path("NVIDIA"),
@@ -36,7 +38,11 @@ class Focus:
 
         self.web_blocker = WebBlocker(blocked_sites=[])  # Initialize WebBlocker instance
 
-        self.data_handler = DataHandler(whitelist=self.whitelist)  # Initialize DataHandler instance
+        self.data_handler = DataHandler(
+            whitelist=self.whitelist,
+            tsip_programs_path=tsip_programs_path,
+            time_spent_on_screen_path=time_spent_on_screen_path
+        )  # Initialize DataHandler instance
         
 
 
@@ -49,8 +55,11 @@ class Focus:
             return x86
         return normal
     
+
+    def session_time(self):
+        return time.time() - self.start_time
     
-        
+
             
 
     def gather_active_window_info(self): 
@@ -208,8 +217,7 @@ class Focus:
         t2 = threading.Thread(target=self.gather_active_window_info, daemon=True)
         t1.start()
         t2.start()
-
-
+ 
     def toggle_game_blocking(self):
         if self.app_blocker.game_state == "Off":
             self.app_blocker.game_state = "On"

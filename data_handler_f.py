@@ -2,10 +2,23 @@ import pandas as pd
 import os
 
 class DataHandler:
-    def __init__(self, whitelist):
-        self.df_tsip_programs_path = "time_spent_in_programs.csv"
+    def __init__(self, whitelist, tsip_programs_path=None, time_spent_on_screen_path=None):
+        # Set up APPDATA folder structure
+        self.appdata = os.getenv("APPDATA")
+        self.app_folder = os.path.join(self.appdata, "FocusFrame")
+        
+        # Ensure app folder exists
+        if not os.path.exists(self.app_folder):
+            os.makedirs(self.app_folder)
+        
+        # Set up file paths
+        self.all_programs_csv_path = os.path.join(self.app_folder, "all_programs.csv")
+        self.block_list_csv_path = os.path.join(self.app_folder, "block_list.csv")
+        self.df_tsip_programs_path = tsip_programs_path or os.path.join(self.app_folder, "time_spent_in_programs.csv")
+        self.df_time_spent_on_screen_path = time_spent_on_screen_path or os.path.join(self.app_folder, "time_spent_on_screen.csv")
+
+        # Load dataframes
         self.df_time_spent_in_programs = self.load_time_spent_in_programs()
-        self.df_time_spent_on_screen_path = "time_spent_on_screen.csv"
         self.df_time_spent_on_screen = self.load_time_spent_on_screen()
         self.whitelist = whitelist
 
@@ -13,6 +26,7 @@ class DataHandler:
 
     def save_dataframe_to_csv(self, df, filename):
         df.to_csv(filename, index=False)
+    
 
     def load_data_from_csv(self, filename):
         try:
@@ -24,6 +38,9 @@ class DataHandler:
             elif filename == self.df_tsip_programs_path:
                 print(f"File {filename} not found. Returning empty DataFrame.")
                 return pd.DataFrame(columns=["Program", "Hours", "Minutes", "Seconds"])
+            elif filename == self.prev_blocked_websites_csv_path:
+                print(f"File {filename} not found. Returning empty DataFrame.")
+                return pd.DataFrame(columns=["Website", "format1", "format2"])
 
     # Load data into DataFrames
     def load_time_spent_in_programs(self):
@@ -114,6 +131,6 @@ class DataHandler:
         self.add_data_to_tsos(date, hours, minutes, seconds)
 
 if __name__ == "__main__":
-    data_handler = DataHandler()
+    data_handler = DataHandler(whitelist=["test.exe"])
     data_handler.add_data_to_tsip("Test Program", 1)
     data_handler.add_data_to_tsos("2024-06-01", 1)

@@ -4,22 +4,26 @@ import tkinter as tk
 from tkinter import ttk
 import pandas as pd
 from focus_main import Focus
-from pandastable import Table
 import ctypes
 
 # Set app ID so Windows treats it as "FocusFrame" not "python.exe"
 myappid = 'focusframe.productivity.app.1.0'
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-focus = Focus()
+
 APPDATA = os.getenv("APPDATA")
 APP_FOLDER = os.path.join(APPDATA, "FocusFrame")
 all_programs_csv_path = os.path.join(APP_FOLDER, "all_programs.csv")
 block_list_csv_path = os.path.join(APP_FOLDER, "block_list.csv")
-focus.data_handler.df_tsip_programs_path = os.path.join(APP_FOLDER, "time_spent_in_programs.csv")
-focus.data_handler.df_time_spent_on_screen_path = os.path.join(APP_FOLDER, "time_spent")
+tsip_programs_path_app_data = os.path.join(APP_FOLDER, "time_spent_in_programs.csv")
+time_spent_on_screen_path_app_data = os.path.join(APP_FOLDER, "time_spent_on_screen.csv")
 
 if not os.path.exists(APP_FOLDER):
     os.makedirs(APP_FOLDER)
+
+focus = Focus(
+    tsip_programs_path=tsip_programs_path_app_data,
+    time_spent_on_screen_path=time_spent_on_screen_path_app_data
+)
 
 window = tk.Tk()
 window.geometry("1600x840")
@@ -30,6 +34,7 @@ window.columnconfigure(0, weight=1)
 style = ttk.Style()
 style.configure("Treeview", rowheight=30)
 
+#To help exe find the logo when running as .exe
 if getattr(sys, 'frozen', False):
     base_path = sys._MEIPASS
 else:
@@ -177,22 +182,52 @@ def update_all_programs():
 def update_active_programs():
     print("Fetching active programs...")
     try:
+        # Save currently selected items
+        selected_items = []
+        for item_id in active_programs.selection():
+            item_values = active_programs.item(item_id)['values']
+            if item_values:
+                selected_items.append((item_values[0], item_values[1]))  # exe, title
+        
         data_snapshot = focus.active_titles.copy()
         print(f"Found {len(data_snapshot)} active windows.")
         for i in active_programs.get_children():
             active_programs.delete(i)
+        
+        # Store new item IDs for restoring selection
+        new_items = {}
+        
         for pid, info in data_snapshot.items():
             exe = info.get("exe", "Unknown")
             title = info.get("title", "No Title")
+            path = info.get("path", "No Path")
             # Filter out FocusFrame itself (python.exe or FocusFrame.exe)
-            if exe.lower() not in focus.whitelist:
-                active_programs.insert(parent="", index=tk.END, values=(exe, title))
+            if exe.lower() not in focus.whitelist or path.lower() in focus.ignored_paths:
+                item_id = active_programs.insert(parent="", index=tk.END, values=(exe, title))
+                new_items[(exe, title)] = item_id
+        
+        # Restore selection
+        for exe, title in selected_items:
+            if (exe, title) in new_items:
+                active_programs.selection_add(new_items[(exe, title)])
+            
     except RuntimeError:
         print("System busy, please try again in a second.")
     except Exception as e:
         print(f"An error occurred: {e}")
     update_all_programs()
 
+auto_refresh_active_activeprograms = False
+auto_refresh_id_activeprograms = None
+
+def auto_update_active_programs():
+    global auto_refresh_id_activeprograms
+    if auto_refresh_active_activeprograms and notebook.index(notebook.select()) == 0:
+        try:
+            update_active_programs()
+        except:
+            pass  # Window might not be focused
+        auto_refresh_id_activeprograms = window.after(1000, auto_update_active_programs)  # Schedule next update
 
 def treeview_to_list(table):
     value_list = []
@@ -382,8 +417,8 @@ programs_stat.column("secs", width=50, stretch=False)
 programs_stat.grid(row=1, column=0, sticky="nsew", padx=5)
 
 
-auto_refresh_active = False
-auto_refresh_id = None
+auto_refresh_active_stats = False
+auto_refresh_id_stats = None
 
 def update_stats():
     for item in programs_stat.get_children():
@@ -398,25 +433,37 @@ def update_stats():
     print(f"Stats updated: {len(df_tsip)} programs")
 
 def auto_update_stats():
-    global auto_refresh_id
-    if auto_refresh_active and notebook.index(notebook.select()) == 3:  # Tab 4 is index 3
+    global auto_refresh_id_stats
+    if auto_refresh_active_stats and notebook.index(notebook.select()) == 3:
         try:
-            if window.focus_displayof():  # Check if window has focus
-                update_stats()
+            update_stats()
         except:
             pass  # Window might not be focused
-        auto_refresh_id = window.after(1000, auto_update_stats)  # Schedule next update
+        auto_refresh_id_stats = window.after(1000, auto_update_stats)  # Schedule next update
 
 def on_tab_changed(event):
-    global auto_refresh_active, auto_refresh_id
-    if notebook.index(notebook.select()) == 3:  # Stats tab (index 3)
-        auto_refresh_active = True
+    global auto_refresh_active_stats, auto_refresh_id_stats, auto_refresh_active_activeprograms, auto_refresh_id_activeprograms
+    current_tab = notebook.index(notebook.select())
+    
+    # Handle Active Programs tab (index 0)
+    if current_tab == 0:
+        auto_refresh_active_activeprograms = True
+        auto_update_active_programs()  # Start auto-refresh
+    else:
+        auto_refresh_active_activeprograms = False
+        if auto_refresh_id_activeprograms:
+            window.after_cancel(auto_refresh_id_activeprograms)
+            auto_refresh_id_activeprograms = None
+    
+    # Handle Stats tab (index 3)
+    if current_tab == 3:
+        auto_refresh_active_stats = True
         auto_update_stats()  # Start auto-refresh
     else:
-        auto_refresh_active = False
-        if auto_refresh_id:
-            window.after_cancel(auto_refresh_id)  # Cancel scheduled update
-            auto_refresh_id = None
+        auto_refresh_active_stats = False
+        if auto_refresh_id_stats:
+            window.after_cancel(auto_refresh_id_stats)
+            auto_refresh_id_stats = None
 
 notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
 
@@ -425,12 +472,12 @@ update_stats_button.grid(row=2, column=0, pady=(2, 5))
 
 
 def on_close():
-    global auto_refresh_active, auto_refresh_id
+    global auto_refresh_active_stats, auto_refresh_id_stats
     print("Closing application...")
     try:
-        auto_refresh_active = False
-        if auto_refresh_id:
-            window.after_cancel(auto_refresh_id)
+        auto_refresh_active_stats = False
+        if auto_refresh_id_stats:
+            window.after_cancel(auto_refresh_id_stats)
         if focus.app_blocker.block_apps:
             focus.app_blocker.stop()
         focus.save_time_data_on_demand()

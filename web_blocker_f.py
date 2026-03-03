@@ -57,6 +57,7 @@ class WebBlocker:
 
         if self.show_prints:
             print("Websites blocked successfully.")
+        self.flush_dns() # Flush DNS after blocking sites to ensure changes take effect.
 
     # Removes the blocked websites from host file.
     # ---------------- NB needs to be run on program crash, uninstall or close.
@@ -87,13 +88,52 @@ class WebBlocker:
             format2 = site if not site.startswith("www.") else site[4:]
             self._blocked_sites.extend([format1, format2])
             self._blocked_sites = list(set(self._blocked_sites)) # Remove duplicates
-            self.block_websites() # Update the hosts file with the new blocked site
+            if self.state == "On":  # Only update hosts file if blocking is active
+                self.block_websites() # Update the hosts file with the new blocked site
 
             if self.show_prints:
                 print(f"{site} added to blocked sites.")
         else:
             if self.show_prints:
                 print(f"{site} is already in the blocked sites list.")
+        self.flush_dns()
+
+    # Removes sites from the blocked list and updates hosts file
+    def remove_blocked_site(self, site):
+        format1 = site if site.startswith("www.") else "www." + site
+        format2 = site if not site.startswith("www.") else site[4:]
+        
+        # Remove from internal blocked sites list
+        sites_to_remove = [format1, format2]
+        for site_format in sites_to_remove:
+            if site_format in self._blocked_sites:
+                self._blocked_sites.remove(site_format)
+        
+        # Remove from hosts file if blocking is currently active
+        if self.state == "On":
+            try:
+                with open(self._hosts_path, "r") as file:
+                    lines = file.readlines()
+                with open(self._hosts_path, "w") as file:
+                    for line in lines:
+                        # Skip lines that contain any of the site formats we want to remove
+                        if not any(site_format in line for site_format in sites_to_remove):
+                            file.write(line)
+                
+                if self.show_prints:
+                    print(f"{site} removed from blocked sites and hosts file.")
+            except Exception as e:
+                if self.show_prints:
+                    print(f"An error occurred while removing {site} from hosts file: {e}")
+                    print("Restoring backup to ensure system stability.")
+                    self.restore_backup()
+        else:
+            if self.show_prints:
+                print(f"{site} removed from blocked sites list.")
+        
+        self.flush_dns()
+        
+
 
     
     def test_menu(self):
@@ -106,6 +146,7 @@ class WebBlocker:
                 print("1. Add a blocked site")
                 print(f"2. Toggle block/unblock all sites | {self.state}")
                 print("3. Exit")
+                print("4. Remove a blocked site")
                 choice = input("\nEnter your choice: ")
 
                 match choice:
@@ -122,6 +163,9 @@ class WebBlocker:
                     case "3":
                         print("Exiting the program.")
                         break
+                    case "4":
+                        site_to_remove = input("Enter the website to unblock (e.g., example.com): ")
+                        self.remove_blocked_site(site_to_remove)
                     case _:
                         print("Invalid choice. Please try again.")
             except KeyboardInterrupt:
