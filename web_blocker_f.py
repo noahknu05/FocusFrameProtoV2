@@ -2,6 +2,7 @@ import os
 from re import match
 import subprocess # To run commands in powershell
 import shutil # To manage files
+import time
 
 
 class WebBlocker:
@@ -16,7 +17,7 @@ class WebBlocker:
 
     # Need to be called after blocking/unblocking.
     # Flushes the DNS cache so changes take effect.
-    def flush_dns(self): 
+    def flush_dns(self):
         ip_flusher = subprocess.run(
         ["ipconfig", "/flushdns"],
         capture_output=True, # Capture the output of the command
@@ -96,7 +97,7 @@ class WebBlocker:
         else:
             if self.show_prints:
                 print(f"{site} is already in the blocked sites list.")
-        self.flush_dns()
+        
 
     # Removes sites from the blocked list and updates hosts file
     def remove_blocked_site(self, site):
